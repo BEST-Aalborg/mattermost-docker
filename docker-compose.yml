@@ -50,13 +50,12 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - letsencrypt:/etc/letsencrypt
     environment:
-      - DOMAINS=ny.best.aau.dk,mm.best.aau.dk
       - NGINX_LOG_ACCESS=Y
       - NGINX_LOG_ERROR=Y
     depends_on:
       - app
     ports:
-      - 127.0.0.1:10083:80
+      - 127.0.0.1:10080:80
       - 127.0.0.1:10443:443
 
 volumes:
