@@ -1,20 +1,12 @@
-server {
-    listen 443 ssl http2;
-
-    ssl on;
-    ssl_certificate /etc/letsencrypt/live/ny.best.aau.dk/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/ny.best.aau.dk/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/ny.best.aau.dk/chain.pem;
-    include /etc/nginx/snippets/ssl.conf;
-
-    server_name ny.best.aau.dk;
-
-    return 301 https://mm.best.aau.dk$request_uri;
+upstream backend {
+   server app:8000;
+   keepalive 32;
 }
 
-map $http_x_forwarded_proto $proxy_x_forwarded_proto {
-  default $http_x_forwarded_proto;
-  ''      $scheme;
+upstream custom_login {
+   server app:9999;
+#   server app:8000;
+   keepalive 32;
 }
 
 server {
@@ -28,40 +20,63 @@ server {
 
     server_name mm.best.aau.dk;
 
-    location ~ /api/v[0-9]+/(users/)?websocket$ {
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header X-Forwarded-Ssl on;
-        proxy_set_header Connection "upgrade";
+   location ~ /api/v[0-9]+/(users/)?websocket$ {
+       proxy_set_header Upgrade $http_upgrade;
+       proxy_set_header Connection "upgrade";
+       client_max_body_size 50M;
+       proxy_set_header Host $http_host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Frame-Options SAMEORIGIN;
+       proxy_buffers 256 16k;
+       proxy_buffer_size 16k;
+       client_body_timeout 60;
+       send_timeout 300;
+       lingering_timeout 5;
+       proxy_connect_timeout 90;
+       proxy_send_timeout 300;
+       proxy_read_timeout 90s;
+       proxy_pass http://backend;
+   }
 
-        client_max_body_size 50M;
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
-        proxy_set_header X-Frame-Options SAMEORIGIN;
-        proxy_buffers 256 16k;
-        proxy_buffer_size 16k;
-        proxy_read_timeout 600s;
-	proxy_pass http://app:8000;
-    }
+   location ~ /api/v[0-9]+/users/login {
+       client_max_body_size 50M;
+       proxy_set_header Connection "";
+       proxy_set_header Host $http_host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Frame-Options SAMEORIGIN;
+       proxy_buffers 256 16k;
+       proxy_buffer_size 16k;
+       proxy_read_timeout 600s;
+       proxy_cache_revalidate on;
+       proxy_cache_min_uses 2;
+       proxy_cache_use_stale timeout;
+       proxy_cache_lock on;
+       proxy_http_version 1.1;
+       proxy_pass http://custom_login;
+   }
 
-    location / {
-        gzip on;
-        proxy_set_header X-Forwarded-Ssl on;
-
-        client_max_body_size 50M;
-        proxy_set_header Connection "";
-        proxy_set_header Host $http_host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $proxy_x_forwarded_proto;
-        proxy_set_header X-Frame-Options SAMEORIGIN;
-        proxy_buffers 256 16k;
-        proxy_buffer_size 16k;
-        proxy_read_timeout 600s;
-	proxy_pass http://app:8000;
-    }
+   location / {
+       client_max_body_size 50M;
+       proxy_set_header Connection "";
+       proxy_set_header Host $http_host;
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-Proto $scheme;
+       proxy_set_header X-Frame-Options SAMEORIGIN;
+       proxy_buffers 256 16k;
+       proxy_buffer_size 16k;
+       proxy_read_timeout 600s;
+       proxy_cache_revalidate on;
+       proxy_cache_min_uses 2;
+       proxy_cache_use_stale timeout;
+       proxy_cache_lock on;
+       proxy_http_version 1.1;
+       proxy_pass http://backend;
+   }
 }
 
 # See https://docs.mattermost.com/install/install-ubuntu-1604.html#configuring-nginx-with-ssl-and-http-2 for the SSL configuration
-
